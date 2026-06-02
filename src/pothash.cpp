@@ -4,6 +4,13 @@
 #include <chrono>
 #include <random>
 
+Vector2D PotHash::projectVectorOnRay(const Vector2D& vector, const int rayAngleDegree)
+{
+    float projectionOfVectorOnRay = vector.vectorComponentX * cos(rayAngleDegree * PI / 180) + vector.vectorComponentY * sin(rayAngleDegree * PI / 180);
+
+    return Vector2D(projectionOfVectorOnRay * cos(rayAngleDegree * PI / 180), projectionOfVectorOnRay * sin(rayAngleDegree * PI / 180));
+}
+
 PotHash::PotHash() : PotHash(64, 16, {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}})
 {
     // Calling parameterized constructor from default constructor with default arguments
@@ -17,8 +24,7 @@ PotHash::PotHash(const int paramD, const int subseqSizeK, const map<char, int>& 
 
     this->tableThetaDegrees = new int[paramD];
 
-    this->tableAx = new int[subseqSizeK * alphabet.size()];
-    this->tableAy = new int[subseqSizeK * alphabet.size()];
+    this->tableA = new Vector2D[subseqSizeK * alphabet.size()];
     this->tableB = new int[subseqSizeK * alphabet.size()];
 }
 
@@ -26,8 +32,7 @@ PotHash::~PotHash()
 {
     delete[] this->tableThetaDegrees;
 
-    delete[] this->tableAx;
-    delete[] this->tableAy;
+    delete[] this->tableA;
     delete[] this->tableB;
 }
 
@@ -67,9 +72,8 @@ void PotHash::generateTables()
     {
         for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
         {
-            // tableAx and tableAy contain X- and Y-coefficients of unnormalized 2D vectors to avoid storing floating-point values on file; should be normalized upon usage
-            this->tableAx[k * this->alphabet.size() + sigma] = uniformIntegerDistributionTablesA(pseudoRandomNumberEngine);
-            this->tableAy[k * this->alphabet.size() + sigma] = uniformIntegerDistributionTablesA(pseudoRandomNumberEngine);
+            // tableA contains integer X- and Y-coefficients of unnormalized 2D vectors to avoid storing floating-point values on file; should be normalized upon usage
+            this->tableA[k * this->alphabet.size() + sigma] = Vector2D((float) uniformIntegerDistributionTablesA(pseudoRandomNumberEngine), (float) uniformIntegerDistributionTablesA(pseudoRandomNumberEngine));
         }
     }
 
@@ -105,5 +109,56 @@ void PotHash::generateTables()
 
 void PotHash::solveDP(const string& sequence)
 {
+    int seqSizeN = sequence.length();
+
+    Vector2D *dpTableT = new Vector2D[(seqSizeN + 1) * (this->subseqSizeK + 1) * this->paramD];
+
+    for (int n = 0; n <= seqSizeN; n++)
+    {
+        // Initialization: no matter what the prefix sequence is, null vector for empty (k = 0) subsequence when d = 0 at the beginning
+        // Note that Score(z1) = Project(Score(0) + A[1, z1], ("0" + B[1, z1]) mod D); "0" in the formulation is the reason why we have null vector for k = 0 and d = 0 at the beginning
+        dpTableT[n * (this->subseqSizeK + 1) * this->paramD + 0 * this->paramD + 0] = Vector2D(0, 0);
+    }
+
+    for (int n = 0; n <= seqSizeN; n++)
+    {
+        for (int d = 1; d < this->paramD; d++)
+        {
+            // Initialization: no matter what the prefix sequence is, invalid vector for empty (k = 0) subsequence when d > 0 at the beginning
+            dpTableT[n * (this->subseqSizeK + 1) * this->paramD + 0 * this->paramD + d] = Vector2D(NEG_INF, NEG_INF);
+        }
+    }
+
+    for (int k = 1; k <= this->subseqSizeK; k++)
+    {
+        for (int d = 0; d < this->paramD; d++)
+        {
+            // Initialization: when prefix sequence is empty, no valid subsequence can be formed unless the subsequence itself is empty
+            dpTableT[0 * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d] = Vector2D(NEG_INF, NEG_INF);
+        }
+    }
+
+    for (int n = 1; n <= seqSizeN; n++)
+    {
+        for (int k = 1; k <= this->subseqSizeK; k++)
+        {
+            for (int d = 0; d < this->paramD; d++)
+            {
+                // Case-1: do not add n-th base of sequence as k-th base of subsequence
+                Vector2D case1ScoreVector = dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d];
+
+                // Case-2: add n-th base of sequence as k-th base of subsequence
+                int dPrevious = (d - this->tableB[(k - 1) * this->alphabet.size() + this->alphabet[sequence[n - 1]]] + this->paramD) % this->paramD;
+
+                Vector2D case2ScoreVector = this->projectVectorOnRay(dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + (k - 1) * this->paramD + dPrevious] + this->tableA[(k - 1) * this->alphabet.size() + this->alphabet[sequence[n - 1]]], this->tableThetaDegrees[d]);
+
+                // Update the DP table at (n, k, d) with the maximum of the two cases
+                dpTableT[n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d] = (case1ScoreVector.magnitude() > case2ScoreVector.magnitude()) ? case1ScoreVector : case2ScoreVector;
+            }
+        }
+    }
+
+    delete[] dpTableT;
+
     return;
 }
