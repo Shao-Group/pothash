@@ -8,29 +8,12 @@
 using namespace std;
 
 #define NEG_INF numeric_limits<float>::lowest()
-#define PI acos(-1)
+#define PI acos(-1.0)
 
 struct Vector2D
 {
-public:
-    float vectorComponentX;
-    float vectorComponentY;
-
-    Vector2D() : Vector2D(0, 0)
-    {
-        // Calling parameterized constructor from default constructor with default arguments
-    }
-
-    Vector2D(const float vectorComponentX, const float vectorComponentY)
-    {
-        this->vectorComponentX = vectorComponentX;
-        this->vectorComponentY = vectorComponentY;
-    }
-
-    Vector2D operator+(const Vector2D& other) const
-    {
-        return Vector2D(this->vectorComponentX + other.vectorComponentX, this->vectorComponentY + other.vectorComponentY);
-    }
+    float vectorComponentX = 0;
+    float vectorComponentY = 0;
 
     float magnitude() const
     {
@@ -39,13 +22,17 @@ public:
 
     Vector2D normalize() const
     {
-        return Vector2D(this->vectorComponentX / this->magnitude(), this->vectorComponentY / this->magnitude());
+        return Vector2D{this->vectorComponentX / this->magnitude(), this->vectorComponentY / this->magnitude()};
+    }
+
+    Vector2D operator+(const Vector2D& other) const
+    {
+        return Vector2D{this->vectorComponentX + other.vectorComponentX, this->vectorComponentY + other.vectorComponentY};
     }
 };
 
 class PotHash
 {
-private:
     int paramD;
     int subseqSizeK;
     map<char, int> alphabet;
