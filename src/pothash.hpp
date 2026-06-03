@@ -2,6 +2,7 @@
 #define POTHASH_HPP
 
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -31,6 +32,19 @@ struct Vector2D
     }
 };
 
+struct DpTableCell
+{
+    Vector2D dpTableCellScoreVector;
+    uint64_t dpTableCellSeed;
+};
+
+struct Seed
+{
+    int seedParamD;
+    Vector2D seedScoreVector;
+    string seedSubsequence;
+};
+
 class PotHash
 {
     int paramD;
@@ -51,7 +65,7 @@ public:
 
     void generateTables();
 
-    void solveDP(const string&);
+    Seed solveDP(const string&);
 };
 
 #endif
