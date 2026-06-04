@@ -9,6 +9,7 @@
 
 using namespace std;
 
+#define EPSILON numeric_limits<float>::min()
 #define NEG_INF numeric_limits<float>::lowest()
 #define PI acos(-1.0)
 
@@ -24,7 +25,7 @@ struct Vector2D
 
     Vector2D normalize() const
     {
-        return Vector2D{this->vectorComponentX / this->magnitude(), this->vectorComponentY / this->magnitude()};
+        return Vector2D{this->vectorComponentX / (this->magnitude() + EPSILON), this->vectorComponentY / (this->magnitude() + EPSILON)};
     }
 
     Vector2D operator+(const Vector2D& other) const

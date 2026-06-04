@@ -30,7 +30,7 @@ string PotHash::generateSeedSubsequence(const uint64_t &seedSubsequence)
     return seed;
 }
 
-PotHash::PotHash() : PotHash(64, 16, {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}})
+PotHash::PotHash() : PotHash(16, 16, {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}})
 {
     // Calling parameterized constructor from default constructor with default arguments
 }
