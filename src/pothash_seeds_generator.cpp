@@ -56,7 +56,7 @@ int main(int argc, char **argv)
 
     string sequence;
 
-    cout << "Generating seeds for dataset \"" << datasetFileName << "\" with PotHash object having paramD = " << paramD << ", subseqSizeK = " << subseqSizeK << " and numRepeats = " << numRepeats << " in seedGenerationMode = " << seedGenerationMode << "..." << endl;
+    cout << "Generating seeds for dataset \"" << datasetFileName << "\" with PotHash object having numRepeats = " << numRepeats << " in seedGenerationMode = " << seedGenerationMode << "..." << endl;
 
     while (datasetFile >> sequence)
     {
