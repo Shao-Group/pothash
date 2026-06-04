@@ -68,7 +68,8 @@ public:
     PotHash(const int, const int, const map<char, int>&);
     ~PotHash();
 
-    void generateTables();
+    void generateTables(const bool, const int);
+    void loadTables(const int);
 
     vector<Seed> solveDP(const string&, const uint8_t&);
 };

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <random>
 
 Vector2D PotHash::projectVectorOnRay(const Vector2D &vector, const int rayAngleDegree)
@@ -58,7 +60,7 @@ PotHash::~PotHash()
     delete[] this->tableB;
 }
 
-void PotHash::generateTables()
+void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVersion)
 {
     random_device seedSource;
 
@@ -125,6 +127,118 @@ void PotHash::generateTables()
             this->tableB[k * this->alphabet.size() + sigma] = paramDValues[sigma];
         }
     }
+
+    if (shouldSaveTables)
+    {
+        string tablesFileFolderPath = string("..") + filesystem::path::preferred_separator + string("tables") + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(this->alphabet.size());
+
+        filesystem::path tablesFileFolder(tablesFileFolderPath);
+
+        if (!filesystem::exists(tablesFileFolder))
+        {
+            if (!filesystem::create_directories(tablesFileFolder))
+            {
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        string tablesFilePath = tablesFileFolderPath + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(this->alphabet.size()) + string("_Version") + to_string(tablesFileVersion);
+
+        ofstream tablesFile(tablesFilePath);
+
+        if (!tablesFile.is_open())
+        {
+            exit(EXIT_FAILURE);
+        }
+
+        for (int d = 0; d < this->paramD; d++)
+        {
+            tablesFile << this->tableThetaDegrees[d] << " ";
+        }
+
+        tablesFile << "\n" << endl;
+
+        for (int k = 0; k < this->subseqSizeK; k++)
+        {
+            for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
+            {
+                tablesFile << (int) this->tableA[k * this->alphabet.size() + sigma].vectorComponentX << " ";
+            }
+
+            tablesFile << endl;
+        }
+
+        tablesFile << endl;
+
+        for (int k = 0; k < this->subseqSizeK; k++)
+        {
+            for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
+            {
+                tablesFile << (int) this->tableA[k * this->alphabet.size() + sigma].vectorComponentY << " ";
+            }
+
+            tablesFile << endl;
+        }
+
+        tablesFile << endl;
+
+        for (int k = 0; k < this->subseqSizeK; k++)
+        {
+            for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
+            {
+                tablesFile << this->tableB[k * this->alphabet.size() + sigma] << " ";
+            }
+
+            tablesFile << endl;
+        }
+
+        tablesFile.close();
+    }
+
+    return;
+}
+
+void PotHash::loadTables(const int tablesFileVersion)
+{
+    string tablesFilePath = string("..") + filesystem::path::preferred_separator + string("tables") + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(this->alphabet.size()) + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(this->alphabet.size()) + string("_Version") + to_string(tablesFileVersion);
+
+    ifstream tablesFile(tablesFilePath);
+
+    if (!tablesFile.is_open())
+    {
+        exit(EXIT_FAILURE);
+    }
+
+    for (int d = 0; d < this->paramD; d++)
+    {
+        tablesFile >> this->tableThetaDegrees[d];
+    }
+
+    for (int k = 0; k < this->subseqSizeK; k++)
+    {
+        for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
+        {
+            tablesFile >> this->tableA[k * this->alphabet.size() + sigma].vectorComponentX;
+        }
+    }
+
+    for (int k = 0; k < this->subseqSizeK; k++)
+    {
+        for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
+        {
+            tablesFile >> this->tableA[k * this->alphabet.size() + sigma].vectorComponentY;
+        }
+    }
+
+    for (int k = 0; k < this->subseqSizeK; k++)
+    {
+        for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
+        {
+            tablesFile >> this->tableB[k * this->alphabet.size() + sigma];
+        }
+    }
+
+    tablesFile.close();
 
     return;
 }
