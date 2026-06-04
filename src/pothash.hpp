@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -56,7 +57,11 @@ class PotHash
     Vector2D *tableA;
     int *tableB;
 
+    map<int, char> reverseAlphabet;
+
     Vector2D projectVectorOnRay(const Vector2D&, const int);
+
+    string generateSeedSubsequence(const uint64_t&);
     
 public:
     PotHash();
@@ -65,7 +70,7 @@ public:
 
     void generateTables();
 
-    Seed solveDP(const string&);
+    vector<Seed> solveDP(const string&, const uint8_t&);
 };
 
 #endif
