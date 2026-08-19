@@ -3,47 +3,26 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
 
 using namespace std;
 
-#define EPSILON numeric_limits<float>::min()
-#define NEG_INF numeric_limits<float>::lowest()
+inline constexpr float NEG_INF = numeric_limits<float>::lowest();
 #define PI acos(-1.0)
-
-struct Vector2D
-{
-    float vectorComponentX = 0;
-    float vectorComponentY = 0;
-
-    float magnitude() const
-    {
-        return sqrt(this->vectorComponentX * this->vectorComponentX + this->vectorComponentY * this->vectorComponentY);
-    }
-
-    Vector2D normalize() const
-    {
-        return Vector2D{this->vectorComponentX / (this->magnitude() + EPSILON), this->vectorComponentY / (this->magnitude() + EPSILON)};
-    }
-
-    Vector2D operator+(const Vector2D& other) const
-    {
-        return Vector2D{this->vectorComponentX + other.vectorComponentX, this->vectorComponentY + other.vectorComponentY};
-    }
-};
 
 struct DpTableCell
 {
-    Vector2D dpTableCellScoreVector;
+    float dpTableCellScore;
     uint64_t dpTableCellSeed;
 };
 
 struct Seed
 {
     int seedParamD;
-    Vector2D seedScoreVector;
+    float seedScore;
     string seedSubsequence;
 };
 
@@ -54,13 +33,12 @@ class PotHash
     map<char, int> alphabet;
 
     int *tableThetaDegrees;
-
-    Vector2D *tableA;
-    int *tableB;
+    float *tableA;
 
     map<int, char> reverseAlphabet;
 
-    Vector2D projectVectorOnRay(const Vector2D&, const int);
+    // P(r, theta, d) = r * cos(theta - Theta[d]); angles stored/passed in degrees
+    float projectScalar(const float, const float, const int) const;
 
     string generateSeedSubsequence(const uint64_t&);
     

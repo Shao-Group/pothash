@@ -26,13 +26,13 @@ int main(int argc, char **argv)
 
     vector<Seed> seeds = potHash.solveDP(sequence, 0); // seedGenerationMode = 0 means that valid seed with minimum d will be picked
     
-    cout << "\nSeeds picked in seedGenerationMode = 0: {seedParamD, seedScoreVector, magnitude(seedScoreVector), seedSubsequence}\n" << endl;
+    cout << "\nSeeds picked in seedGenerationMode = 0: {seedParamD, seedScore, seedSubsequence}\n" << endl;
 
     for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
     {
         if (seeds[seedIdx].seedParamD != -1)
         {
-            cout << "-> " << seeds[seedIdx].seedParamD << ", <" << seeds[seedIdx].seedScoreVector.vectorComponentX << ", " << seeds[seedIdx].seedScoreVector.vectorComponentY << ">, " << seeds[seedIdx].seedScoreVector.magnitude() << ", " << seeds[seedIdx].seedSubsequence << endl;
+            cout << "-> " << seeds[seedIdx].seedParamD << ", " << seeds[seedIdx].seedScore << ", " << seeds[seedIdx].seedSubsequence << endl;
         }
         else
         {
@@ -40,15 +40,15 @@ int main(int argc, char **argv)
         }
     }
 
-    seeds = potHash.solveDP(sequence, 1); // seedGenerationMode = 1 means that valid seed with maximum magnitude of score vector will be picked
+    seeds = potHash.solveDP(sequence, 1); // seedGenerationMode = 1 means that valid seed with maximum scalar score will be picked
 
-    cout << "\nSeeds picked in seedGenerationMode = 1: {seedParamD, seedScoreVector, magnitude(seedScoreVector), seedSubsequence}\n" << endl;
+    cout << "\nSeeds picked in seedGenerationMode = 1: {seedParamD, seedScore, seedSubsequence}\n" << endl;
 
     for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
     {
         if (seeds[seedIdx].seedParamD != -1)
         {
-            cout << "-> " << seeds[seedIdx].seedParamD << ", <" << seeds[seedIdx].seedScoreVector.vectorComponentX << ", " << seeds[seedIdx].seedScoreVector.vectorComponentY << ">, " << seeds[seedIdx].seedScoreVector.magnitude() << ", " << seeds[seedIdx].seedSubsequence << endl;
+            cout << "-> " << seeds[seedIdx].seedParamD << ", " << seeds[seedIdx].seedScore << ", " << seeds[seedIdx].seedSubsequence << endl;
         }
         else
         {
@@ -58,13 +58,13 @@ int main(int argc, char **argv)
 
     seeds = potHash.solveDP(sequence, 2); // seedGenerationMode = 2 means that all seeds will be picked regardless of them being valid or invalid
 
-    cout << "\nSeeds picked in seedGenerationMode = 2: {seedParamD, seedScoreVector, magnitude(seedScoreVector), seedSubsequence}\n" << endl;
+    cout << "\nSeeds picked in seedGenerationMode = 2: {seedParamD, seedScore, seedSubsequence}\n" << endl;
 
     for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
     {
         if (seeds[seedIdx].seedParamD != -1)
         {
-            cout << "-> " << seeds[seedIdx].seedParamD << ", <" << seeds[seedIdx].seedScoreVector.vectorComponentX << ", " << seeds[seedIdx].seedScoreVector.vectorComponentY << ">, " << seeds[seedIdx].seedScoreVector.magnitude() << ", " << seeds[seedIdx].seedSubsequence << endl;
+            cout << "-> " << seeds[seedIdx].seedParamD << ", " << seeds[seedIdx].seedScore << ", " << seeds[seedIdx].seedSubsequence << endl;
         }
         else
         {

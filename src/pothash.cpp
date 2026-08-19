@@ -7,11 +7,12 @@
 #include <fstream>
 #include <random>
 
-Vector2D PotHash::projectVectorOnRay(const Vector2D &vector, const int rayAngleDegree)
+float PotHash::projectScalar(const float r, const float thetaDegrees, const int rayIndex) const
 {
-    float projectionOfVectorOnRay = vector.vectorComponentX * cos(rayAngleDegree * PI / 180) + vector.vectorComponentY * sin(rayAngleDegree * PI / 180);
+    float thetaRadian = thetaDegrees * PI / 180.0;
+    float rayAngleRadian = this->tableThetaDegrees[rayIndex] * PI / 180.0;
 
-    return Vector2D{(float) (projectionOfVectorOnRay * cos(rayAngleDegree * PI / 180)), (float) (projectionOfVectorOnRay * sin(rayAngleDegree * PI / 180))};
+    return r * cos(thetaRadian - rayAngleRadian);
 }
 
 string PotHash::generateSeedSubsequence(const uint64_t &seedSubsequence)
@@ -41,10 +42,8 @@ PotHash::PotHash(const int paramD, const int subseqSizeK, const map<char, int> &
     this->subseqSizeK = subseqSizeK;
     this->alphabet = alphabet;
 
-    this->tableThetaDegrees = new int[paramD];
-
-    this->tableA = new Vector2D[subseqSizeK * alphabet.size()];
-    this->tableB = new int[subseqSizeK * alphabet.size()];
+    this->tableThetaDegrees = new int[this->paramD];
+    this->tableA = new float[this->subseqSizeK * alphabet.size()];
 
     for (auto const &pair: alphabet)
     {
@@ -55,9 +54,7 @@ PotHash::PotHash(const int paramD, const int subseqSizeK, const map<char, int> &
 PotHash::~PotHash()
 {
     delete[] this->tableThetaDegrees;
-
     delete[] this->tableA;
-    delete[] this->tableB;
 }
 
 void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVersion)
@@ -86,45 +83,18 @@ void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVe
 
     for (int d = 0; d < this->paramD; d++)
     {
-        // tableThetaDegrees contains random ray angles in degrees to avoid storing floating-point values on file; should be converted to radians upon usage
+        // tableThetaDegrees contains random ray angles in degrees; converted to radians upon usage
         this->tableThetaDegrees[d] = randomThetaDegrees[d];
     }
 
-    uniform_int_distribution<int> uniformIntegerDistributionTableA(- (1 << 10), 1 << 10);
+    // tableA stores angles in degrees in [0, 360), matching PDF angles in [0, 2π)
+    uniform_real_distribution<float> uniformRealDistributionTableA(0.0f, 360.0f);
 
     for (int k = 0; k < this->subseqSizeK; k++)
     {
         for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
         {
-            // tableA contains integer X- and Y-coefficients of unnormalized 2D vectors to avoid storing floating-point values on file; should be normalized upon usage
-            this->tableA[k * this->alphabet.size() + sigma] = Vector2D{(float) uniformIntegerDistributionTableA(pseudoRandomNumberEngine), (float) uniformIntegerDistributionTableA(pseudoRandomNumberEngine)};
-        }
-    }
-
-    vector<int> paramDValues;
-
-    for (int i = 0; i < this->paramD; i++)
-    {
-        paramDValues.push_back(i);
-    }
-
-    if (this->alphabet.size() > this->paramD)
-    {
-        for (int i = this->paramD; i < this->alphabet.size(); i++)
-        {
-            paramDValues.push_back(i % this->paramD);
-        }
-    }
-
-    for (int k = 0; k < this->subseqSizeK; k++)
-    {
-        currentTimeBasedSeed = chrono::system_clock::now().time_since_epoch().count();
-
-        shuffle(paramDValues.begin(), paramDValues.end(), default_random_engine(currentTimeBasedSeed));
-
-        for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
-        {
-            this->tableB[k * this->alphabet.size() + sigma] = paramDValues[sigma];
+            this->tableA[k * this->alphabet.size() + sigma] = uniformRealDistributionTableA(pseudoRandomNumberEngine);
         }
     }
 
@@ -162,31 +132,7 @@ void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVe
         {
             for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
             {
-                tablesFile << (int) this->tableA[k * this->alphabet.size() + sigma].vectorComponentX << " ";
-            }
-
-            tablesFile << endl;
-        }
-
-        tablesFile << endl;
-
-        for (int k = 0; k < this->subseqSizeK; k++)
-        {
-            for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
-            {
-                tablesFile << (int) this->tableA[k * this->alphabet.size() + sigma].vectorComponentY << " ";
-            }
-
-            tablesFile << endl;
-        }
-
-        tablesFile << endl;
-
-        for (int k = 0; k < this->subseqSizeK; k++)
-        {
-            for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
-            {
-                tablesFile << this->tableB[k * this->alphabet.size() + sigma] << " ";
+                tablesFile << this->tableA[k * this->alphabet.size() + sigma] << " ";
             }
 
             tablesFile << endl;
@@ -218,23 +164,7 @@ void PotHash::loadTables(const int tablesFileVersion)
     {
         for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
         {
-            tablesFile >> this->tableA[k * this->alphabet.size() + sigma].vectorComponentX;
-        }
-    }
-
-    for (int k = 0; k < this->subseqSizeK; k++)
-    {
-        for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
-        {
-            tablesFile >> this->tableA[k * this->alphabet.size() + sigma].vectorComponentY;
-        }
-    }
-
-    for (int k = 0; k < this->subseqSizeK; k++)
-    {
-        for (int sigma = 0; sigma < this->alphabet.size(); sigma++)
-        {
-            tablesFile >> this->tableB[k * this->alphabet.size() + sigma];
+            tablesFile >> this->tableA[k * this->alphabet.size() + sigma];
         }
     }
 
@@ -251,17 +181,10 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
 
     for (int n = 0; n <= seqSizeN; n++)
     {
-        // Initialization: no matter what the prefix sequence is, null vector for empty (k = 0) subsequence when d = 0 at the beginning
-        // Note that Score(z1) = Project(Score(0) + A[1, z1], ("0" + B[1, z1]) mod D); "0" in the formulation is the reason why we have null vector for k = 0 and d = 0 at the beginning
-        dpTableT[n * (this->subseqSizeK + 1) * this->paramD + 0 * this->paramD + 0] = DpTableCell{Vector2D{0, 0}, 0};
-    }
-
-    for (int n = 0; n <= seqSizeN; n++)
-    {
-        for (int d = 1; d < this->paramD; d++)
+        for (int d = 0; d < this->paramD; d++)
         {
-            // Initialization: no matter what the prefix sequence is, invalid vector for empty (k = 0) subsequence when d > 0 at the beginning
-            dpTableT[n * (this->subseqSizeK + 1) * this->paramD + 0 * this->paramD + d] = DpTableCell{Vector2D{NEG_INF, NEG_INF}, UINT64_MAX};
+            // f(∅, d) = 0 for every d (August 4 formulation; no B/ψ constraint on the empty subsequence)
+            dpTableT[n * (this->subseqSizeK + 1) * this->paramD + 0 * this->paramD + d] = DpTableCell{0.0f, 0};
         }
     }
 
@@ -269,8 +192,8 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
     {
         for (int d = 0; d < this->paramD; d++)
         {
-            // Initialization: when prefix sequence is empty, no valid subsequence can be formed unless the subsequence itself is empty
-            dpTableT[0 * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d] = DpTableCell{Vector2D{NEG_INF, NEG_INF}, UINT64_MAX};
+            // Initialization: when prefix sequence is empty, no valid subsequence of length k > 0 can be formed
+            dpTableT[0 * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d] = DpTableCell{NEG_INF, UINT64_MAX};
         }
     }
 
@@ -280,25 +203,56 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
         {
             for (int d = 0; d < this->paramD; d++)
             {
+                int currentIndex = n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d;
+                int skipIndex = (n - 1) * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d;
+                int currentBase = this->alphabet[sequence[n - 1]];
+
                 // Case-1: do not add n-th base of sequence as k-th base of subsequence
-                Vector2D case1ScoreVector = dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d].dpTableCellScoreVector;
+                float case1Score = dpTableT[skipIndex].dpTableCellScore;
+                uint64_t case1Seed = dpTableT[skipIndex].dpTableCellSeed;
 
-                // Case-2: add n-th base of sequence as k-th base of subsequence
-                int dPrevious = (d - this->tableB[(k - 1) * this->alphabet.size() + this->alphabet[sequence[n - 1]]] + this->paramD) % this->paramD;
+                // Case-2: add n-th base; maximize over all previous ray indices d'
+                float maxPrevProjection = NEG_INF;
+                uint64_t bestPrevSeed = UINT64_MAX;
+                bool hasValidPrev = false;
 
-                Vector2D case2ScoreVector = Vector2D{NEG_INF, NEG_INF};
-
-                if (dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + (k - 1) * this->paramD + dPrevious].dpTableCellScoreVector.vectorComponentX > NEG_INF && dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + (k - 1) * this->paramD + dPrevious].dpTableCellScoreVector.vectorComponentY > NEG_INF)
+                for (int dPrev = 0; dPrev < this->paramD; dPrev++)
                 {
-                    case2ScoreVector = this->projectVectorOnRay(dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + (k - 1) * this->paramD + dPrevious].dpTableCellScoreVector + this->tableA[(k - 1) * this->alphabet.size() + this->alphabet[sequence[n - 1]]].normalize(), this->tableThetaDegrees[d]);
+                    int takePreviousIndex = (n - 1) * (this->subseqSizeK + 1) * this->paramD + (k - 1) * this->paramD + dPrev;
+                    float prevScore = dpTableT[takePreviousIndex].dpTableCellScore;
+
+                    if (prevScore > NEG_INF)
+                    {
+                        float prevProjection = this->projectScalar(prevScore, (float) this->tableThetaDegrees[dPrev], d);
+
+                        if (!hasValidPrev || prevProjection > maxPrevProjection)
+                        {
+                            maxPrevProjection = prevProjection;
+                            bestPrevSeed = dpTableT[takePreviousIndex].dpTableCellSeed;
+                            hasValidPrev = true;
+                        }
+                    }
                 }
 
-                // Update the DP table cell at location [n, k, d] with a score vector and a prefix of seed, based on the magnitude of score vectors from above two cases
+                float case2Score = NEG_INF;
+                uint64_t case2Seed = UINT64_MAX;
+
+                if (hasValidPrev)
+                {
+                    float angleA = this->tableA[(k - 1) * this->alphabet.size() + currentBase];
+                    float addProjection = this->projectScalar(1.0f, angleA, d);
+                    float clampedPrev = (maxPrevProjection > 0.0f) ? maxPrevProjection : 0.0f;
+                    float combined = addProjection + clampedPrev;
+
+                    case2Score = (combined > 0.0f) ? combined : 0.0f;
+                    case2Seed = (bestPrevSeed << 2) | (uint64_t) currentBase;
+                }
+
                 bool isCase1Better = false, isCase2Better = false;
 
-                if ((case1ScoreVector.vectorComponentX > NEG_INF && case1ScoreVector.vectorComponentY > NEG_INF) && (case2ScoreVector.vectorComponentX > NEG_INF && case2ScoreVector.vectorComponentY > NEG_INF))
+                if (case1Score > NEG_INF && case2Score > NEG_INF)
                 {
-                    if (case1ScoreVector.magnitude() > case2ScoreVector.magnitude())
+                    if (case1Score > case2Score)
                     {
                         isCase1Better = true;
                     }
@@ -307,28 +261,26 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
                         isCase2Better = true;
                     }
                 }
-                else if (case1ScoreVector.vectorComponentX > NEG_INF && case1ScoreVector.vectorComponentY > NEG_INF)
+                else if (case1Score > NEG_INF)
                 {
                     isCase1Better = true;
                 }
-                else if (case2ScoreVector.vectorComponentX > NEG_INF && case2ScoreVector.vectorComponentY > NEG_INF)
+                else if (case2Score > NEG_INF)
                 {
                     isCase2Better = true;
                 }
 
                 if (isCase1Better)
                 {
-                    dpTableT[n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d].dpTableCellScoreVector = case1ScoreVector;
-                    dpTableT[n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d].dpTableCellSeed = dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d].dpTableCellSeed;
+                    dpTableT[currentIndex] = DpTableCell{case1Score, case1Seed};
                 }
                 else if (isCase2Better)
                 {
-                    dpTableT[n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d].dpTableCellScoreVector = case2ScoreVector;
-                    dpTableT[n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d].dpTableCellSeed = (dpTableT[(n - 1) * (this->subseqSizeK + 1) * this->paramD + (k - 1) * this->paramD + dPrevious].dpTableCellSeed << 2) | (uint64_t) this->alphabet[sequence[n - 1]];
+                    dpTableT[currentIndex] = DpTableCell{case2Score, case2Seed};
                 }
                 else
                 {
-                    dpTableT[n * (this->subseqSizeK + 1) * this->paramD + k * this->paramD + d] = DpTableCell{Vector2D{NEG_INF, NEG_INF}, UINT64_MAX};
+                    dpTableT[currentIndex] = DpTableCell{NEG_INF, UINT64_MAX};
                 }
             }
         }
@@ -339,11 +291,11 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
     if (seedGenerationMode == 0)
     {
         // Extract a single valid seed from the dpTableT[N, K] column having the lowest d value associated with it
-        Seed seed = Seed{-1, Vector2D{NEG_INF, NEG_INF}, "X"};
+        Seed seed = Seed{-1, NEG_INF, "X"};
 
         for (int d = 0; d < this->paramD; d++)
         {
-            if (dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.vectorComponentX > NEG_INF && dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.vectorComponentY > NEG_INF)
+            if (dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScore > NEG_INF)
             {
                 seed.seedParamD = d;
 
@@ -353,41 +305,38 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
 
         if (seed.seedParamD != -1)
         {
-            seed.seedScoreVector = dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + seed.seedParamD].dpTableCellScoreVector;
+            int terminalIndex = seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + seed.seedParamD;
 
-            seed.seedSubsequence = this->generateSeedSubsequence(dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + seed.seedParamD].dpTableCellSeed);
+            seed.seedScore = dpTableT[terminalIndex].dpTableCellScore;
+            seed.seedSubsequence = this->generateSeedSubsequence(dpTableT[terminalIndex].dpTableCellSeed);
         }
 
         seeds.push_back(seed);
     }
     else if (seedGenerationMode == 1)
     {
-        // Extract a single valid seed from the dpTableT[N, K] column having the highest magnitude of score vector associated with it
-        Seed seed = Seed{-1, Vector2D{NEG_INF, NEG_INF}, "X"};
+        // Extract a single valid seed with maximum scalar score (PDF: final score = max_d f(z, d))
+        Seed seed = Seed{-1, NEG_INF, "X"};
 
         for (int d = 0; d < this->paramD; d++)
         {
-            if (dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.vectorComponentX > NEG_INF && dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.vectorComponentY > NEG_INF)
+            float terminalScore = dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScore;
+
+            if (terminalScore > NEG_INF)
             {
-                if (seed.seedScoreVector.vectorComponentX > NEG_INF && seed.seedScoreVector.vectorComponentY > NEG_INF)
-                {
-                    if (dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.magnitude() > seed.seedScoreVector.magnitude())
-                    {
-                        seed.seedParamD = d;
-                        seed.seedScoreVector = dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector;
-                    }
-                }
-                else
+                if (seed.seedParamD == -1 || terminalScore > seed.seedScore)
                 {
                     seed.seedParamD = d;
-                    seed.seedScoreVector = dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector;
+                    seed.seedScore = terminalScore;
                 }
             }
         }
 
         if (seed.seedParamD != -1)
         {
-            seed.seedSubsequence = this->generateSeedSubsequence(dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + seed.seedParamD].dpTableCellSeed);
+            int terminalIndex = seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + seed.seedParamD;
+
+            seed.seedSubsequence = this->generateSeedSubsequence(dpTableT[terminalIndex].dpTableCellSeed);
         }
 
         seeds.push_back(seed);
@@ -397,13 +346,14 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
         // Extract all D seeds from the dpTableT[N, K] column regardless of them being valid or invalid
         for (int d = 0; d < this->paramD; d++)
         {
-            Seed seed = Seed{-1, Vector2D{NEG_INF, NEG_INF}, "X"};
+            Seed seed = Seed{-1, NEG_INF, "X"};
+            int terminalIndex = seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d;
 
-            if (dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.vectorComponentX > NEG_INF && dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector.vectorComponentY > NEG_INF)
+            if (dpTableT[terminalIndex].dpTableCellScore > NEG_INF)
             {
                 seed.seedParamD = d;
-                seed.seedScoreVector = dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellScoreVector;
-                seed.seedSubsequence = this->generateSeedSubsequence(dpTableT[seqSizeN * (this->subseqSizeK + 1) * this->paramD + this->subseqSizeK * this->paramD + d].dpTableCellSeed);
+                seed.seedScore = dpTableT[terminalIndex].dpTableCellScore;
+                seed.seedSubsequence = this->generateSeedSubsequence(dpTableT[terminalIndex].dpTableCellSeed);
             }
 
             seeds.push_back(seed);

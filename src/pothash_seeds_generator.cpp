@@ -72,11 +72,11 @@ int main(int argc, char **argv)
             {
                 if (seeds[seedIdx].seedParamD != -1)
                 {
-                    seedsFile << repeat << "," << seeds[seedIdx].seedParamD << "," << seeds[seedIdx].seedScoreVector.vectorComponentX << "," << seeds[seedIdx].seedScoreVector.vectorComponentY << "," << seeds[seedIdx].seedScoreVector.magnitude() << "," << seeds[seedIdx].seedSubsequence << endl;
+                    seedsFile << repeat << "," << seeds[seedIdx].seedParamD << "," << seeds[seedIdx].seedScore << "," << seeds[seedIdx].seedSubsequence << endl;
                 }
                 else
                 {
-                    seedsFile << repeat << "," << seeds[seedIdx].seedParamD << "," << -1 << "," << -1 << "," << -1 << "," << seeds[seedIdx].seedSubsequence << endl;
+                    seedsFile << repeat << "," << seeds[seedIdx].seedParamD << "," << -1 << "," << seeds[seedIdx].seedSubsequence << endl;
                 }
             }
         }
