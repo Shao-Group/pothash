@@ -13,55 +13,62 @@ float PotHash::projectScalar(const float r, const float thetaDegrees, const floa
     return r * cos(thetaRadian - thetaPrimeRadian);
 }
 
-int PotHash::indexA(const int k, const int sigma) const
+int PotHash::indexA(const int k, const int sigma, const int db) const
+{
+    return k * (int) this->alphabet.size() * this->paramDb + sigma * this->paramDb + db;
+}
+
+int PotHash::indexB(const int k, const int sigma, const int da, const int db) const
+{
+    return k * (int) this->alphabet.size() * this->paramDa * this->paramDb + sigma * this->paramDa * this->paramDb + da * this->paramDb + db;
+}
+
+int PotHash::indexC(const int k, const int sigma) const
 {
     return k * (int) this->alphabet.size() + sigma;
 }
 
-int PotHash::indexB(const int k, const int sigma, const int d) const
-{
-    return k * (int) this->alphabet.size() * this->paramD + sigma * this->paramD + d;
-}
-
-int PotHash::indexDP(const int n, const int k, const int d, const int lastBase) const
+int PotHash::indexDP(const int n, const int k, const int da, const int db, const int lastBase) const
 {
     const int alphabetSize = (int) this->alphabet.size();
 
-    return n * (this->subseqSizeK + 1) * this->paramD * alphabetSize + k * this->paramD * alphabetSize + d * alphabetSize + lastBase;
+    return n * (this->subseqSizeK + 1) * this->paramDa * this->paramDb * alphabetSize
+         + k * this->paramDa * this->paramDb * alphabetSize
+         + da * this->paramDb * alphabetSize
+         + db * alphabetSize
+         + lastBase;
 }
 
-string PotHash::generateSeedSubsequence(const uint64_t &seedSubsequence)
+string PotHash::generateSeedSubsequence(const uint64_t &seedSubsequence) const
 {
     string seed = "";
-    
     uint64_t seedSubsequenceCopy = seedSubsequence;
 
     for (int k = 0; k < this->subseqSizeK; k++)
     {
-        seed = this->reverseAlphabet[seedSubsequenceCopy & 3] + seed;
-
+        seed = this->reverseAlphabet.at(seedSubsequenceCopy & 3) + seed;
         seedSubsequenceCopy = seedSubsequenceCopy >> 2;
     }
 
     return seed;
 }
 
-PotHash::PotHash() : PotHash(16, 16, {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}})
+PotHash::PotHash() : PotHash(17, 17, 16, {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}})
 {
-    // Calling parameterized constructor from default constructor with default arguments
 }
 
-PotHash::PotHash(const int paramD, const int subseqSizeK, const map<char, int> &alphabet)
+PotHash::PotHash(const int paramDa, const int paramDb, const int subseqSizeK, const map<char, int> &alphabet)
 {
-    // August 16 formulation: D need not be even (no global complementary Theta set)
-    this->paramD = paramD;
+    this->paramDa = paramDa;
+    this->paramDb = paramDb;
     this->subseqSizeK = subseqSizeK;
     this->alphabet = alphabet;
 
     const int alphabetSize = (int) alphabet.size();
 
-    this->tableA = new float[this->subseqSizeK * alphabetSize];
-    this->tableB = new float[this->subseqSizeK * alphabetSize * this->paramD];
+    this->tableA = new float[this->subseqSizeK * alphabetSize * this->paramDb];
+    this->tableB = new float[this->subseqSizeK * alphabetSize * this->paramDa * this->paramDb];
+    this->tableC = new int[this->subseqSizeK * alphabetSize];
 
     for (auto const &pair: alphabet)
     {
@@ -73,35 +80,39 @@ PotHash::~PotHash()
 {
     delete[] this->tableA;
     delete[] this->tableB;
+    delete[] this->tableC;
 }
 
 void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVersion)
 {
     random_device seedSource;
-
     mt19937 pseudoRandomNumberEngine(seedSource());
 
     const int alphabetSize = (int) this->alphabet.size();
-
-    // ThetaA and ThetaB store angles in degrees in [0, 360), matching PDF [0, 2π)
     uniform_real_distribution<float> uniformAngleDegrees(0.0f, 360.0f);
+    uniform_int_distribution<int> uniformC(0, this->paramDb - 1);
 
     for (int k = 0; k < this->subseqSizeK; k++)
     {
         for (int sigma = 0; sigma < alphabetSize; sigma++)
         {
-            this->tableA[this->indexA(k, sigma)] = uniformAngleDegrees(pseudoRandomNumberEngine);
+            this->tableC[this->indexC(k, sigma)] = uniformC(pseudoRandomNumberEngine);
 
-            for (int d = 0; d < this->paramD; d++)
+            for (int db = 0; db < this->paramDb; db++)
             {
-                this->tableB[this->indexB(k, sigma, d)] = uniformAngleDegrees(pseudoRandomNumberEngine);
+                this->tableA[this->indexA(k, sigma, db)] = uniformAngleDegrees(pseudoRandomNumberEngine);
+
+                for (int da = 0; da < this->paramDa; da++)
+                {
+                    this->tableB[this->indexB(k, sigma, da, db)] = uniformAngleDegrees(pseudoRandomNumberEngine);
+                }
             }
         }
     }
 
     if (shouldSaveTables)
     {
-        string tablesFileFolderPath = string("..") + filesystem::path::preferred_separator + string("tables") + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize);
+        string tablesFileFolderPath = string("..") + filesystem::path::preferred_separator + string("tables") + filesystem::path::preferred_separator + string("tables_Da") + to_string(this->paramDa) + string("_Db") + to_string(this->paramDb) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize);
 
         filesystem::path tablesFileFolder(tablesFileFolderPath);
 
@@ -113,7 +124,7 @@ void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVe
             }
         }
 
-        string tablesFilePath = tablesFileFolderPath + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize) + string("_Version") + to_string(tablesFileVersion);
+        string tablesFilePath = tablesFileFolderPath + filesystem::path::preferred_separator + string("tables_Da") + to_string(this->paramDa) + string("_Db") + to_string(this->paramDb) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize) + string("_Version") + to_string(tablesFileVersion);
 
         ofstream tablesFile(tablesFilePath);
 
@@ -122,11 +133,12 @@ void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVe
             exit(EXIT_FAILURE);
         }
 
+        // C: K lines of Sigma ints
         for (int k = 0; k < this->subseqSizeK; k++)
         {
             for (int sigma = 0; sigma < alphabetSize; sigma++)
             {
-                tablesFile << this->tableA[this->indexA(k, sigma)] << " ";
+                tablesFile << this->tableC[this->indexC(k, sigma)] << " ";
             }
 
             tablesFile << endl;
@@ -134,16 +146,36 @@ void PotHash::generateTables(const bool shouldSaveTables, const int tablesFileVe
 
         tablesFile << endl;
 
+        // A: for each k, sigma: Db angles
         for (int k = 0; k < this->subseqSizeK; k++)
         {
             for (int sigma = 0; sigma < alphabetSize; sigma++)
             {
-                for (int d = 0; d < this->paramD; d++)
+                for (int db = 0; db < this->paramDb; db++)
                 {
-                    tablesFile << this->tableB[this->indexB(k, sigma, d)] << " ";
+                    tablesFile << this->tableA[this->indexA(k, sigma, db)] << " ";
                 }
 
                 tablesFile << endl;
+            }
+        }
+
+        tablesFile << endl;
+
+        // B: for each k, sigma, da: Db angles
+        for (int k = 0; k < this->subseqSizeK; k++)
+        {
+            for (int sigma = 0; sigma < alphabetSize; sigma++)
+            {
+                for (int da = 0; da < this->paramDa; da++)
+                {
+                    for (int db = 0; db < this->paramDb; db++)
+                    {
+                        tablesFile << this->tableB[this->indexB(k, sigma, da, db)] << " ";
+                    }
+
+                    tablesFile << endl;
+                }
             }
         }
 
@@ -157,7 +189,7 @@ void PotHash::loadTables(const int tablesFileVersion)
 {
     const int alphabetSize = (int) this->alphabet.size();
 
-    string tablesFilePath = string("..") + filesystem::path::preferred_separator + string("tables") + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize) + filesystem::path::preferred_separator + string("tables_D") + to_string(this->paramD) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize) + string("_Version") + to_string(tablesFileVersion);
+    string tablesFilePath = string("..") + filesystem::path::preferred_separator + string("tables") + filesystem::path::preferred_separator + string("tables_Da") + to_string(this->paramDa) + string("_Db") + to_string(this->paramDb) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize) + filesystem::path::preferred_separator + string("tables_Da") + to_string(this->paramDa) + string("_Db") + to_string(this->paramDb) + string("_K") + to_string(this->subseqSizeK) + string("_Sigma") + to_string(alphabetSize) + string("_Version") + to_string(tablesFileVersion);
 
     ifstream tablesFile(tablesFilePath);
 
@@ -170,7 +202,7 @@ void PotHash::loadTables(const int tablesFileVersion)
     {
         for (int sigma = 0; sigma < alphabetSize; sigma++)
         {
-            tablesFile >> this->tableA[this->indexA(k, sigma)];
+            tablesFile >> this->tableC[this->indexC(k, sigma)];
         }
     }
 
@@ -178,9 +210,23 @@ void PotHash::loadTables(const int tablesFileVersion)
     {
         for (int sigma = 0; sigma < alphabetSize; sigma++)
         {
-            for (int d = 0; d < this->paramD; d++)
+            for (int db = 0; db < this->paramDb; db++)
             {
-                tablesFile >> this->tableB[this->indexB(k, sigma, d)];
+                tablesFile >> this->tableA[this->indexA(k, sigma, db)];
+            }
+        }
+    }
+
+    for (int k = 0; k < this->subseqSizeK; k++)
+    {
+        for (int sigma = 0; sigma < alphabetSize; sigma++)
+        {
+            for (int da = 0; da < this->paramDa; da++)
+            {
+                for (int db = 0; db < this->paramDb; db++)
+                {
+                    tablesFile >> this->tableB[this->indexB(k, sigma, da, db)];
+                }
             }
         }
     }
@@ -190,23 +236,35 @@ void PotHash::loadTables(const int tablesFileVersion)
     return;
 }
 
-vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerationMode)
+Seed PotHash::solveDP(const string &sequence)
 {
     const int alphabetSize = (int) this->alphabet.size();
     const int seqSizeN = (int) sequence.length();
-    const int dpPlane = (this->subseqSizeK + 1) * this->paramD * alphabetSize;
+    const int dpPlane = (this->subseqSizeK + 1) * this->paramDa * this->paramDb * alphabetSize;
 
-    // T[n,k,d,σ]: best score for length-k subsequences of s[1..n] with index d and last base σ
+    // T[n,k,da,db,σ]: best ω_da among length-k subsequences of s[1..n] with psi=db and last base σ
     DpTableCell *dpTableT = new DpTableCell[(seqSizeN + 1) * dpPlane];
 
-    // Empty (k=0): score 0 for every d; lastBase unused — fill all σ slots with 0 for simple skip/take wiring
+    // Empty: psi=0, omega=0 for every da; lastBase unused — fill all σ slots
     for (int n = 0; n <= seqSizeN; n++)
     {
-        for (int d = 0; d < this->paramD; d++)
+        for (int da = 0; da < this->paramDa; da++)
         {
-            for (int sigma = 0; sigma < alphabetSize; sigma++)
+            for (int db = 0; db < this->paramDb; db++)
             {
-                dpTableT[this->indexDP(n, 0, d, sigma)] = DpTableCell{0.0f, 0};
+                for (int sigma = 0; sigma < alphabetSize; sigma++)
+                {
+                    int cellIdx = this->indexDP(n, 0, da, db, sigma);
+
+                    if (db == 0)
+                    {
+                        dpTableT[cellIdx] = DpTableCell{0.0f, 0};
+                    }
+                    else
+                    {
+                        dpTableT[cellIdx] = DpTableCell{NEG_INF, UINT64_MAX};
+                    }
+                }
             }
         }
     }
@@ -214,11 +272,14 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
     // n=0 cannot form positive-length subsequences
     for (int k = 1; k <= this->subseqSizeK; k++)
     {
-        for (int d = 0; d < this->paramD; d++)
+        for (int da = 0; da < this->paramDa; da++)
         {
-            for (int sigma = 0; sigma < alphabetSize; sigma++)
+            for (int db = 0; db < this->paramDb; db++)
             {
-                dpTableT[this->indexDP(0, k, d, sigma)] = DpTableCell{NEG_INF, UINT64_MAX};
+                for (int sigma = 0; sigma < alphabetSize; sigma++)
+                {
+                    dpTableT[this->indexDP(0, k, da, db, sigma)] = DpTableCell{NEG_INF, UINT64_MAX};
+                }
             }
         }
     }
@@ -227,210 +288,161 @@ vector<Seed> PotHash::solveDP(const string &sequence, const uint8_t &seedGenerat
     {
         for (int k = 1; k <= this->subseqSizeK; k++)
         {
-            for (int d = 0; d < this->paramD; d++)
+            for (int da = 0; da < this->paramDa; da++)
             {
-                int currentBase = this->alphabet[sequence[n - 1]];
-
-                float angleA = this->tableA[this->indexA(k - 1, currentBase)];
-                float angleBCurrent = this->tableB[this->indexB(k - 1, currentBase, d)];
-                float addProjection = this->projectScalar(1.0f, angleA, angleBCurrent);
-
-                // Precompute best previous projection over (d', σ_prev) when taking sn (k >= 2)
-                float maxPrevProjection = NEG_INF;
-                uint64_t bestPrevSeed = UINT64_MAX;
-                bool hasValidPrev = false;
-
-                if (k >= 2)
+                for (int db = 0; db < this->paramDb; db++)
                 {
-                    for (int dPrev = 0; dPrev < this->paramD; dPrev++)
+                    int currentBase = this->alphabet[sequence[n - 1]];
+                    int cVal = this->tableC[this->indexC(k - 1, currentBase)];
+                    int dbPrev = (db - cVal + this->paramDb) % this->paramDb;
+
+                    float angleA = this->tableA[this->indexA(k - 1, currentBase, db)];
+                    float angleBCurrent = this->tableB[this->indexB(k - 1, currentBase, da, db)];
+                    float addProjection = this->projectScalar(1.0f, angleA, angleBCurrent);
+
+                    float maxPrevProjection = NEG_INF;
+                    uint64_t bestPrevSeed = UINT64_MAX;
+                    bool hasValidPrev = false;
+
+                    if (k == 1)
                     {
-                        for (int sigmaPrev = 0; sigmaPrev < alphabetSize; sigmaPrev++)
+                        // Empty previous requires dbPrev == 0; projection of 0 is 0
+                        if (dbPrev == 0)
                         {
-                            int takePreviousIndex = this->indexDP(n - 1, k - 1, dPrev, sigmaPrev);
-                            float prevScore = dpTableT[takePreviousIndex].dpTableCellScore;
-
-                            if (prevScore > NEG_INF)
+                            maxPrevProjection = 0.0f;
+                            bestPrevSeed = 0;
+                            hasValidPrev = true;
+                        }
+                    }
+                    else
+                    {
+                        for (int daPrev = 0; daPrev < this->paramDa; daPrev++)
+                        {
+                            for (int sigmaPrev = 0; sigmaPrev < alphabetSize; sigmaPrev++)
                             {
-                                float angleBPrev = this->tableB[this->indexB(k - 2, sigmaPrev, dPrev)];
-                                float prevProjection = this->projectScalar(prevScore, angleBPrev, angleBCurrent);
+                                int takePreviousIndex = this->indexDP(n - 1, k - 1, daPrev, dbPrev, sigmaPrev);
+                                float prevScore = dpTableT[takePreviousIndex].dpTableCellScore;
 
-                                if (!hasValidPrev || prevProjection > maxPrevProjection)
+                                if (prevScore > NEG_INF)
                                 {
-                                    maxPrevProjection = prevProjection;
-                                    bestPrevSeed = dpTableT[takePreviousIndex].dpTableCellSeed;
-                                    hasValidPrev = true;
+                                    float angleBPrev = this->tableB[this->indexB(k - 2, sigmaPrev, daPrev, dbPrev)];
+                                    float prevProjection = this->projectScalar(prevScore, angleBPrev, angleBCurrent);
+
+                                    if (!hasValidPrev || prevProjection > maxPrevProjection)
+                                    {
+                                        maxPrevProjection = prevProjection;
+                                        bestPrevSeed = dpTableT[takePreviousIndex].dpTableCellSeed;
+                                        hasValidPrev = true;
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                float takeScore = NEG_INF;
-                uint64_t takeSeed = UINT64_MAX;
+                    float takeScore = NEG_INF;
+                    uint64_t takeSeed = UINT64_MAX;
 
-                if (k == 1)
-                {
-                    takeScore = (addProjection > 0.0f) ? addProjection : 0.0f;
-                    takeSeed = (uint64_t) currentBase;
-                }
-                else if (hasValidPrev)
-                {
-                    float clampedPrev = (maxPrevProjection > 0.0f) ? maxPrevProjection : 0.0f;
-                    float combined = addProjection + clampedPrev;
-
-                    takeScore = (combined > 0.0f) ? combined : 0.0f;
-                    takeSeed = (bestPrevSeed << 2) | (uint64_t) currentBase;
-                }
-
-                for (int sigma = 0; sigma < alphabetSize; sigma++)
-                {
-                    int currentIndex = this->indexDP(n, k, d, sigma);
-                    int skipIndex = this->indexDP(n - 1, k, d, sigma);
-
-                    // Case-1: sn not picked — keep same last base σ
-                    float case1Score = dpTableT[skipIndex].dpTableCellScore;
-                    uint64_t case1Seed = dpTableT[skipIndex].dpTableCellSeed;
-
-                    // Case-2: sn picked — only valid when new last base equals sn
-                    float case2Score = NEG_INF;
-                    uint64_t case2Seed = UINT64_MAX;
-
-                    if (sigma == currentBase)
+                    if (hasValidPrev)
                     {
-                        case2Score = takeScore;
-                        case2Seed = takeSeed;
+                        float clampedPrev = (maxPrevProjection > 0.0f) ? maxPrevProjection : 0.0f;
+                        float combined = addProjection + clampedPrev;
+
+                        takeScore = (combined > 0.0f) ? combined : 0.0f;
+                        takeSeed = (bestPrevSeed << 2) | (uint64_t) currentBase;
                     }
 
-                    bool isCase1Better = false, isCase2Better = false;
-
-                    if (case1Score > NEG_INF && case2Score > NEG_INF)
+                    for (int sigma = 0; sigma < alphabetSize; sigma++)
                     {
-                        if (case1Score > case2Score)
+                        int currentIndex = this->indexDP(n, k, da, db, sigma);
+                        int skipIndex = this->indexDP(n - 1, k, da, db, sigma);
+
+                        float case1Score = dpTableT[skipIndex].dpTableCellScore;
+                        uint64_t case1Seed = dpTableT[skipIndex].dpTableCellSeed;
+
+                        float case2Score = NEG_INF;
+                        uint64_t case2Seed = UINT64_MAX;
+
+                        if (sigma == currentBase)
+                        {
+                            case2Score = takeScore;
+                            case2Seed = takeSeed;
+                        }
+
+                        bool isCase1Better = false, isCase2Better = false;
+
+                        if (case1Score > NEG_INF && case2Score > NEG_INF)
+                        {
+                            if (case1Score > case2Score)
+                            {
+                                isCase1Better = true;
+                            }
+                            else
+                            {
+                                isCase2Better = true;
+                            }
+                        }
+                        else if (case1Score > NEG_INF)
                         {
                             isCase1Better = true;
                         }
-                        else
+                        else if (case2Score > NEG_INF)
                         {
                             isCase2Better = true;
                         }
-                    }
-                    else if (case1Score > NEG_INF)
-                    {
-                        isCase1Better = true;
-                    }
-                    else if (case2Score > NEG_INF)
-                    {
-                        isCase2Better = true;
-                    }
 
-                    if (isCase1Better)
-                    {
-                        dpTableT[currentIndex] = DpTableCell{case1Score, case1Seed};
-                    }
-                    else if (isCase2Better)
-                    {
-                        dpTableT[currentIndex] = DpTableCell{case2Score, case2Seed};
-                    }
-                    else
-                    {
-                        dpTableT[currentIndex] = DpTableCell{NEG_INF, UINT64_MAX};
+                        if (isCase1Better)
+                        {
+                            dpTableT[currentIndex] = DpTableCell{case1Score, case1Seed};
+                        }
+                        else if (isCase2Better)
+                        {
+                            dpTableT[currentIndex] = DpTableCell{case2Score, case2Seed};
+                        }
+                        else
+                        {
+                            dpTableT[currentIndex] = DpTableCell{NEG_INF, UINT64_MAX};
+                        }
                     }
                 }
             }
         }
     }
 
-    auto bestOverLastBase = [&](const int d, float &outScore, uint64_t &outSeed) -> bool
+    // Final: omega_db = max_{da,σ} T[N,K,da,db,σ]; pick smallest valid psi=db
+    Seed seed = Seed{-1, NEG_INF, "X"};
+
+    for (int db = 0; db < this->paramDb; db++)
     {
-        outScore = NEG_INF;
-        outSeed = UINT64_MAX;
-        bool found = false;
+        float bestOmegaForDb = NEG_INF;
+        int bestDaForDb = -1;
+        uint64_t bestSeedForDb = UINT64_MAX;
 
-        for (int sigma = 0; sigma < alphabetSize; sigma++)
+        for (int da = 0; da < this->paramDa; da++)
         {
-            int terminalIndex = this->indexDP(seqSizeN, this->subseqSizeK, d, sigma);
-            float score = dpTableT[terminalIndex].dpTableCellScore;
-
-            if (score > NEG_INF && (!found || score > outScore))
+            for (int sigma = 0; sigma < alphabetSize; sigma++)
             {
-                outScore = score;
-                outSeed = dpTableT[terminalIndex].dpTableCellSeed;
-                found = true;
-            }
-        }
+                int terminalIndex = this->indexDP(seqSizeN, this->subseqSizeK, da, db, sigma);
+                float score = dpTableT[terminalIndex].dpTableCellScore;
 
-        return found;
-    };
-
-    vector<Seed> seeds;
-
-    if (seedGenerationMode == 0)
-    {
-        Seed seed = Seed{-1, NEG_INF, "X"};
-
-        for (int d = 0; d < this->paramD; d++)
-        {
-            float score;
-            uint64_t packedSeed;
-
-            if (bestOverLastBase(d, score, packedSeed))
-            {
-                seed.seedParamD = d;
-                seed.seedScore = score;
-                seed.seedSubsequence = this->generateSeedSubsequence(packedSeed);
-
-                break;
-            }
-        }
-
-        seeds.push_back(seed);
-    }
-    else if (seedGenerationMode == 1)
-    {
-        Seed seed = Seed{-1, NEG_INF, "X"};
-
-        for (int d = 0; d < this->paramD; d++)
-        {
-            float score;
-            uint64_t packedSeed;
-
-            if (bestOverLastBase(d, score, packedSeed))
-            {
-                if (seed.seedParamD == -1 || score > seed.seedScore)
+                if (score > NEG_INF && (bestDaForDb == -1 || score > bestOmegaForDb))
                 {
-                    seed.seedParamD = d;
-                    seed.seedScore = score;
-                    seed.seedSubsequence = this->generateSeedSubsequence(packedSeed);
+                    bestOmegaForDb = score;
+                    bestDaForDb = da;
+                    bestSeedForDb = dpTableT[terminalIndex].dpTableCellSeed;
                 }
             }
         }
 
-        seeds.push_back(seed);
-    }
-    else if (seedGenerationMode == 2)
-    {
-        for (int d = 0; d < this->paramD; d++)
+        if (bestDaForDb != -1)
         {
-            Seed seed = Seed{-1, NEG_INF, "X"};
-            float score;
-            uint64_t packedSeed;
-
-            if (bestOverLastBase(d, score, packedSeed))
-            {
-                seed.seedParamD = d;
-                seed.seedScore = score;
-                seed.seedSubsequence = this->generateSeedSubsequence(packedSeed);
-            }
-
-            seeds.push_back(seed);
+            seed.seedPsi = db;
+            seed.seedOmega = bestOmegaForDb;
+            seed.seedSubsequence = this->generateSeedSubsequence(bestSeedForDb);
+            break;
         }
-    }
-    else
-    {
-        exit(EXIT_FAILURE);
     }
 
     delete[] dpTableT;
 
-    return seeds;
+    return seed;
 }

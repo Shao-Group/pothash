@@ -9,7 +9,7 @@ int main(int argc, char **argv)
 {
     if (argc != 6)
     {
-        cerr << "Invalid number of command-line arguments provided!\nCorrect usage: ./pothash_seeds_generator [datasetFileName] [paramD] [subseqSizeK] [numRepeats] [seedGenerationMode]" << endl;
+        cerr << "Invalid number of command-line arguments provided!\nCorrect usage: ./pothash_seeds_generator [datasetFileName] [paramDa] [paramDb] [subseqSizeK] [numRepeats]" << endl;
 
         return EXIT_FAILURE;
     }
@@ -37,11 +37,11 @@ int main(int argc, char **argv)
         }
     }
 
-    int paramD = stoi(argv[2]), subseqSizeK = stoi(argv[3]), numRepeats = stoi(argv[4]), seedGenerationMode = stoi(argv[5]);
+    int paramDa = stoi(argv[2]), paramDb = stoi(argv[3]), subseqSizeK = stoi(argv[4]), numRepeats = stoi(argv[5]);
 
     map<char, int> defaultAlphabet = {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}};
 
-    string seedsFilePath = seedsFileFolderPath + filesystem::path::preferred_separator + string("seeds_") + datasetFileName + string("_D") + to_string(paramD) + string("_K") + to_string(subseqSizeK) + string("_Sigma") + to_string(defaultAlphabet.size()) + string("_numRepeats") + to_string(numRepeats) + string("_seedGenerationMode") + to_string(seedGenerationMode);
+    string seedsFilePath = seedsFileFolderPath + filesystem::path::preferred_separator + string("seeds_") + datasetFileName + string("_Da") + to_string(paramDa) + string("_Db") + to_string(paramDb) + string("_K") + to_string(subseqSizeK) + string("_Sigma") + to_string(defaultAlphabet.size()) + string("_numRepeats") + to_string(numRepeats);
 
     ofstream seedsFile(seedsFilePath);
 
@@ -50,13 +50,13 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    cout << "Instantiating a PotHash object with paramD = " << paramD << " and subseqSizeK = " << subseqSizeK << "..." << endl;
+    cout << "Instantiating a PotHash object with paramDa = " << paramDa << ", paramDb = " << paramDb << " and subseqSizeK = " << subseqSizeK << "..." << endl;
 
-    PotHash potHash(paramD, subseqSizeK, defaultAlphabet);
+    PotHash potHash(paramDa, paramDb, subseqSizeK, defaultAlphabet);
 
     string sequence;
 
-    cout << "Generating seeds for dataset \"" << datasetFileName << "\" with PotHash object having numRepeats = " << numRepeats << " in seedGenerationMode = " << seedGenerationMode << "..." << endl;
+    cout << "Generating seeds for dataset \"" << datasetFileName << "\" with PotHash object having numRepeats = " << numRepeats << " (SubseqHash-style min valid psi)..." << endl;
 
     while (datasetFile >> sequence)
     {
@@ -66,18 +66,15 @@ int main(int argc, char **argv)
         {
             potHash.loadTables(repeat);
 
-            vector<Seed> seeds = potHash.solveDP(sequence, seedGenerationMode);
+            Seed seed = potHash.solveDP(sequence);
 
-            for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
+            if (seed.seedPsi != -1)
             {
-                if (seeds[seedIdx].seedParamD != -1)
-                {
-                    seedsFile << repeat << "," << seeds[seedIdx].seedParamD << "," << seeds[seedIdx].seedScore << "," << seeds[seedIdx].seedSubsequence << endl;
-                }
-                else
-                {
-                    seedsFile << repeat << "," << seeds[seedIdx].seedParamD << "," << -1 << "," << seeds[seedIdx].seedSubsequence << endl;
-                }
+                seedsFile << repeat << "," << seed.seedPsi << "," << seed.seedOmega << "," << seed.seedSubsequence << endl;
+            }
+            else
+            {
+                seedsFile << repeat << "," << seed.seedPsi << "," << -1 << "," << seed.seedSubsequence << endl;
             }
         }
     }

@@ -6,7 +6,6 @@
 #include <limits>
 #include <map>
 #include <string>
-#include <vector>
 
 using namespace std;
 
@@ -21,43 +20,48 @@ struct DpTableCell
 
 struct Seed
 {
-    int seedParamD;
-    float seedScore;
+    int seedPsi;
+    float seedOmega;
     string seedSubsequence;
 };
 
 class PotHash
 {
-    int paramD;
+    int paramDa;
+    int paramDb;
     int subseqSizeK;
     map<char, int> alphabet;
 
-    // ThetaA[k, sigma]: angle in degrees
+    // ThetaA[k, sigma, db]
     float *tableA;
-    // ThetaB[k, sigma, d]: angle in degrees
+    // ThetaB[k, sigma, da, db]
     float *tableB;
+    // C[k, sigma] in [0, Db)
+    int *tableC;
 
     map<int, char> reverseAlphabet;
 
     // P(r, theta, thetaPrime) = r * cos(theta - thetaPrime); angles in degrees
     float projectScalar(const float, const float, const float) const;
 
-    int indexA(const int, const int) const;
-    int indexB(const int, const int, const int) const;
-    // DP cell T[n,k,d,lastBase]
-    int indexDP(const int, const int, const int, const int) const;
+    int indexA(const int, const int, const int) const;
+    int indexB(const int, const int, const int, const int) const;
+    int indexC(const int, const int) const;
+    // DP cell T[n,k,da,db,lastBase]
+    int indexDP(const int, const int, const int, const int, const int) const;
 
-    string generateSeedSubsequence(const uint64_t&);
-    
+    string generateSeedSubsequence(const uint64_t&) const;
+
 public:
     PotHash();
-    PotHash(const int, const int, const map<char, int>&);
+    PotHash(const int, const int, const int, const map<char, int>&);
     ~PotHash();
 
     void generateTables(const bool, const int);
     void loadTables(const int);
 
-    vector<Seed> solveDP(const string&, const uint8_t&);
+    // SubseqHash-style: smallest valid psi=db after omega_db = max_{da,σ} T[N,K,da,db,σ]
+    Seed solveDP(const string&);
 };
 
 #endif

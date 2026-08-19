@@ -4,13 +4,13 @@
 
 int main(int argc, char **argv)
 {
-    int paramD = 16, subseqSizeK = 16;
+    int paramDa = 17, paramDb = 17, subseqSizeK = 16;
 
     map<char, int> defaultAlphabet = {{'A', 0}, {'C', 1}, {'G', 2}, {'T', 3}};
 
-    cout << "Instantiating a PotHash object with paramD = " << paramD << " and subseqSizeK = " << subseqSizeK << "..." << endl;
+    cout << "Instantiating a PotHash object with paramDa = " << paramDa << ", paramDb = " << paramDb << " and subseqSizeK = " << subseqSizeK << "..." << endl;
 
-    PotHash potHash(paramD, subseqSizeK, defaultAlphabet);
+    PotHash potHash(paramDa, paramDb, subseqSizeK, defaultAlphabet);
 
     bool shouldSaveTables = false;
 
@@ -22,54 +22,19 @@ int main(int argc, char **argv)
 
     string sequence = "ACGTACGTACGTACGTACGT";
 
-    cout << "\nGenerating seeds for sequence \"" << sequence << "\" with PotHash object..." << endl;
+    cout << "\nGenerating seed for sequence \"" << sequence << "\" with PotHash object..." << endl;
 
-    vector<Seed> seeds = potHash.solveDP(sequence, 0); // seedGenerationMode = 0 means that valid seed with minimum d will be picked
-    
-    cout << "\nSeeds picked in seedGenerationMode = 0: {seedParamD, seedScore, seedSubsequence}\n" << endl;
+    Seed seed = potHash.solveDP(sequence);
 
-    for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
+    cout << "\nSeed picked (min valid psi): {psi, omega, subsequence}\n" << endl;
+
+    if (seed.seedPsi != -1)
     {
-        if (seeds[seedIdx].seedParamD != -1)
-        {
-            cout << "-> " << seeds[seedIdx].seedParamD << ", " << seeds[seedIdx].seedScore << ", " << seeds[seedIdx].seedSubsequence << endl;
-        }
-        else
-        {
-            cout << "-> \"No valid seed found\"" << endl;
-        }
+        cout << "-> " << seed.seedPsi << ", " << seed.seedOmega << ", " << seed.seedSubsequence << endl;
     }
-
-    seeds = potHash.solveDP(sequence, 1); // seedGenerationMode = 1 means that valid seed with maximum scalar score will be picked
-
-    cout << "\nSeeds picked in seedGenerationMode = 1: {seedParamD, seedScore, seedSubsequence}\n" << endl;
-
-    for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
+    else
     {
-        if (seeds[seedIdx].seedParamD != -1)
-        {
-            cout << "-> " << seeds[seedIdx].seedParamD << ", " << seeds[seedIdx].seedScore << ", " << seeds[seedIdx].seedSubsequence << endl;
-        }
-        else
-        {
-            cout << "-> \"No valid seed found\"" << endl;
-        }
-    }
-
-    seeds = potHash.solveDP(sequence, 2); // seedGenerationMode = 2 means that all seeds will be picked regardless of them being valid or invalid
-
-    cout << "\nSeeds picked in seedGenerationMode = 2: {seedParamD, seedScore, seedSubsequence}\n" << endl;
-
-    for (int seedIdx = 0; seedIdx < seeds.size(); seedIdx++)
-    {
-        if (seeds[seedIdx].seedParamD != -1)
-        {
-            cout << "-> " << seeds[seedIdx].seedParamD << ", " << seeds[seedIdx].seedScore << ", " << seeds[seedIdx].seedSubsequence << endl;
-        }
-        else
-        {
-            cout << "-> \"No valid seed found\"" << endl;
-        }
+        cout << "-> \"No valid seed found\"" << endl;
     }
     
     cout << "\nDone!" << endl;
