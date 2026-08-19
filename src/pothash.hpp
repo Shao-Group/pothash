@@ -32,13 +32,20 @@ class PotHash
     int subseqSizeK;
     map<char, int> alphabet;
 
-    int *tableThetaDegrees;
+    // ThetaA[k, sigma]: angle in degrees
     float *tableA;
+    // ThetaB[k, sigma, d]: angle in degrees
+    float *tableB;
 
     map<int, char> reverseAlphabet;
 
-    // P(r, theta, d) = r * cos(theta - Theta[d]); angles stored/passed in degrees
-    float projectScalar(const float, const float, const int) const;
+    // P(r, theta, thetaPrime) = r * cos(theta - thetaPrime); angles in degrees
+    float projectScalar(const float, const float, const float) const;
+
+    int indexA(const int, const int) const;
+    int indexB(const int, const int, const int) const;
+    // DP cell T[n,k,d,lastBase]
+    int indexDP(const int, const int, const int, const int) const;
 
     string generateSeedSubsequence(const uint64_t&);
     
